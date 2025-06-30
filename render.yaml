@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: hausa-music-server
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: "npm install && apt-get update && apt-get install -y yt-dlp"
+    startCommand: "node index.js"
