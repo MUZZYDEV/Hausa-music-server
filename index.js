@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const app = express();
 const port = process.env.PORT || 4000;
 
@@ -16,24 +18,39 @@ app.get('/download', (req, res) => {
 
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const filename = `hausa-music-${videoId}.mp4`;
+  const filePath = path.join(__dirname, filename);
 
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.setHeader('Content-Type', 'video/mp4');
+  // yt-dlp command: download best audio+video and merge
+  const command = `yt-dlp -f best -o "${filePath}" "${url}"`;
 
-  const command = `yt-dlp -o - "${url}"`; // no format selection
+  console.log('Running command:', command);
 
-  const process = exec(command, { maxBuffer: 1024 * 1024 * 100 });
-
-  process.stdout.pipe(res);
-
-  process.stderr.on('data', data => {
-    console.error('Download error:', data.toString());
-  });
-
-  process.on('exit', code => {
-    if (code !== 0) {
-      console.error(`yt-dlp exited with code ${code}`);
+  exec(command, { maxBuffer: 1024 * 1024 * 200 }, (error, stdout, stderr) => {
+    if (error) {
+      console.error('Download error:', stderr);
+      return res.status(500).json({ error: 'Failed to download video' });
     }
+
+    // Set headers
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'video/mp4');
+
+    // Create a stream to send the file
+    const stream = fs.createReadStream(filePath);
+
+    stream.pipe(res);
+
+    stream.on('close', () => {
+      // Delete temp file after sending
+      fs.unlink(filePath, err => {
+        if (err) console.error('Failed to delete file:', err);
+      });
+    });
+
+    stream.on('error', err => {
+      console.error('Stream error:', err);
+      res.status(500).end();
+    });
   });
 });
 
